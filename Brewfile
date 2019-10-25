@@ -4,6 +4,7 @@ tap "homebrew/core"
 tap "homebrew/cask-fonts"
 
 brew "ansible"
+brew "bat"
 brew "kubernetes-cli"
 brew "kubernetes-helm"
 brew "python"
