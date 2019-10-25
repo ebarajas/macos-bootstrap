@@ -1,0 +1,186 @@
+trap 'ret=$?; test $ret -ne 0 && printf "\n   \e[31m\033[0m  Shiny failed  \e[31m\033[0m\n" >&2; exit $ret' EXIT
+
+set -e
+
+ask_for_sudo
+
+if type xcode-select >&- && xpath=$( xcode-select --print-path ) &&
+	test -d "${xpath}" && test -x "${xpath}" ; then
+	print_success_muted "Xcode already installed. Skipping."
+else
+	step "Installing Xcode…"
+	xcode-select --install
+	print_success "Xcode installed!"
+fi
+
+if [ ! -d "$HOME/.bin/" ]; then
+	mkdir "$HOME/.bin"
+fi
+
+
+
+if ! [ -x "$(command -v brew)" ]; then
+	step "Installing Homebrew…"
+	curl -fsS 'https://raw.githubusercontent.com/Homebrew/install/master/install' | ruby
+	export PATH="/usr/local/bin:$PATH"
+	print_success "Homebrew installed!"
+else
+	print_success_muted "Homebrew already installed. Skipping."
+fi
+
+if brew list | grep -Fq brew-cask; then
+	step "Uninstalling old Homebrew-Cask…"
+	brew uninstall --force brew-cask
+	print_success "Homebrew-Cask uninstalled!"
+fi
+
+if ! [ -x "$(command -v mas)" ]; then
+	step "Installing mas-cli…"
+    brew install mas
+	print_success "Homebrew installed!"
+else
+	print_success_muted "Homebrew already installed. Skipping."
+fi
+
+if [ -e Brewfile ]; then
+    brew bundle
+else
+	printf "\n ⚠️  Brewfile not found, how are we suppoed to install things? 🤔 \n"
+    exit 1
+fi
+
+chapter "Cleaning up Homebrew files…"
+brew cleanup 2> /dev/null
+
+chapter "Making directories…"
+DIRECTORIES=(
+    $HOME/Desktop/GIFs
+    $HOME/Desktop/Screenshots
+    $HOME/work
+    $HOME/personal
+)
+
+for dir in ${DIRECTORIES[@]}; do
+    mkd $dir
+done
+
+chapter "Setting up VS Code"
+step "Setting up 'code' symlink"
+ln -s /Applications/Visual Studio Code.app/Contents/Resources/app/bin/code /usr/local/bin/code
+step "Installing VS Code Extensions"
+while read ext; do
+	code --install-extension $ext
+done < vscode-exts
+print_success "Done setting up VS Code!"
+
+chapter "Configuring MacOS Settings…"
+# Close any open System Preferences panes, to prevent them from overriding
+# settings we’re about to change
+osascript -e 'tell application "System Preferences" to quit'
+
+# Always show scrollbars
+defaults write NSGlobalDomain AppleShowScrollBars -string "Always"
+
+# Expand save panel by default
+defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
+defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode2 -bool true
+
+# Expand print panel by default
+defaults write NSGlobalDomain PMPrintingExpandedStateForPrint -bool true
+defaults write NSGlobalDomain PMPrintingExpandedStateForPrint2 -bool true
+
+# Save to disk (not to iCloud) by default
+defaults write NSGlobalDomain NSDocumentSaveNewDocumentsToCloud -bool false
+
+# Automatically quit printer app once the print jobs complete
+defaults write com.apple.print.PrintingPrefs "Quit When Finished" -bool true
+
+# Disable the “Are you sure you want to open this application?” dialog
+defaults write com.apple.LaunchServices LSQuarantine -bool false
+
+# Require password immediately after sleep or screen saver begins
+defaults write com.apple.screensaver askForPassword -int 1
+defaults write com.apple.screensaver askForPasswordDelay -int 0
+
+# Save screenshots to the desktop
+defaults write com.apple.screencapture location -string "${HOME}/Desktop/Screenshots"
+
+# Save screenshots in PNG format (other options: BMP, GIF, JPG, PDF, TIFF)
+defaults write com.apple.screencapture type -string "png"
+
+# Disable shadow in screenshots
+defaults write com.apple.screencapture disable-shadow -bool true
+
+# Enable HiDPI display modes (requires restart)
+sudo defaults write /Library/Preferences/com.apple.windowserver DisplayResolutionEnabled -bool true
+
+# Finder: allow quitting via ⌘ + Q; doing so will also hide desktop icons
+defaults write com.apple.finder QuitMenuItem -bool true
+
+# Show icons for hard drives, servers, and removable media on the desktop
+defaults write com.apple.finder ShowExternalHardDrivesOnDesktop -bool true
+defaults write com.apple.finder ShowHardDrivesOnDesktop -bool true
+defaults write com.apple.finder ShowMountedServersOnDesktop -bool true
+defaults write com.apple.finder ShowRemovableMediaOnDesktop -bool true
+
+# Finder: show hidden files by default
+#defaults write com.apple.finder AppleShowAllFiles -bool true
+
+# Finder: show all filename extensions
+defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+
+# Finder: show status bar
+defaults write com.apple.finder ShowStatusBar -bool true
+
+# Finder: show path bar
+defaults write com.apple.finder ShowPathbar -bool true
+
+# Display full POSIX path as Finder window title
+defaults write com.apple.finder _FXShowPosixPathInTitle -bool true
+
+# Keep folders on top when sorting by name
+defaults write com.apple.finder _FXSortFoldersFirst -bool true
+
+# When performing a search, search the current folder by default
+defaults write com.apple.finder FXDefaultSearchScope -string "SCcf"
+
+# Disable the warning when changing a file extension
+defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false
+
+# Use list view in all Finder windows by default
+# Four-letter codes for the other view modes: `icnv`, `clmv`, `glyv`
+defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"
+
+# Show the ~/Library folder
+chflags nohidden ~/Library
+
+# Show the /Volumes folder
+sudo chflags nohidden /Volumes
+
+# Automatically hide and show the Dock
+defaults write com.apple.dock autohide -bool true
+
+print_success "Done configuring MacOS Settings"
+
+chapter "Installing Oh My Zsh"
+
+if [ -d "$HOME/.oh-my-zsh" ]; then
+	print_success_muted "Oh My Zsh already installed. Skipping."
+else
+	step "Installing Oh My Zsh…"
+	sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+	step "Installing Powerlevel10k Theme…"
+	git clone https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
+	echo "ZSH_THEME=powerlevel10k/powerlevel" >> ~/.zshrc
+	step "Running configuration…"
+	p10k configure
+	print_success "Oh My Zsh installed!"
+fi
+
+
+chapter "Cloning Dotfiles"
+DOTFILES_ROOT=$HOME/.dotfiles
+git clone https://github.com/ebarajas/dotfiles $DOTFILES_ROOT
+symlink_dotfiles
+
+print_success "All Done!"
