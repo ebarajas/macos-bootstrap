@@ -18,6 +18,7 @@ brew "terraform"
 brew "tflint"
 
 cask "authy"
+cask "tableplus"
 cask "docker"
 cask "google-chrome"
 cask "paw"
