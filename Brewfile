@@ -4,6 +4,7 @@ tap "homebrew/core"
 tap "homebrew/cask-fonts"
 
 brew "ansible"
+brew "azure-cli"
 brew "bat"
 brew "coreutils"
 brew "findutils"
